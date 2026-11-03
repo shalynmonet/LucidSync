@@ -190,12 +190,19 @@ def render_benchmark():
     st.write("TXMM norm reports contain human character codes only. Other Hall–Van de Castle categories are not evaluated.")
     st.caption("Historical reports may contain distressing content and outdated language. Report text and model responses stay in the ignored local data folder.")
     if MOCK_MODE:
-        st.warning("MOCK MODE: empty placeholder predictions. These scores are not measured Muse Spark performance.")
+        st.warning("New runs use MOCK MODE: empty placeholder predictions. The saved run's mode is identified below.")
     try:
         reports = load_reports()
     except (OSError, ValueError) as error:
         st.error(f"Could not load the benchmark CSV files: {error}")
         return
+    with st.expander("Inspect source files: columns, counts and sample rows"):
+        st.write("Columns in both files: Report, Characters")
+        for group in ("female", "male"):
+            source_rows = [r for r in reports if r["group"] == group]
+            st.write(f"hvdc_norms_{group}.csv: {len(source_rows)} reports")
+            st.dataframe([{"Report": r["report"], "Characters": r["human_codes"]}
+                          for r in source_rows[:3]], hide_index=True)
     size = int(st.number_input("Reports to evaluate (balanced, even number)", min_value=2, max_value=2*min(sum(r['group']==g for r in reports) for g in ('female','male')), value=50, step=2))
     consent = MOCK_MODE or st.checkbox("Send these benchmark reports to Meta for coding (API usage may incur charges).")
     if st.button("Run benchmark", disabled=not consent or size % 2 != 0):
@@ -208,6 +215,8 @@ def render_benchmark():
         result = json.loads((ROOT / "results.json").read_text(encoding="utf-8"))
     if result:
         st.subheader(result["mode"])
+        if result["mock"]:
+            st.warning("These saved scores use mock placeholders, not measured Muse Spark performance.")
         st.write(f"Evaluated {result['evaluated']} / {result['sample_size']}; failed or invalid: {result['failed_or_invalid']}. Seed: {result['seed']}.")
         st.caption("Saved results may use a different sample size or mode from the current settings. Undefined metrics are blank. Failures are excluded and reported above.")
         value = result["overall_agreement_percent"]

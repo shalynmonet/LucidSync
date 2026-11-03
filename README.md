@@ -149,3 +149,27 @@ entries are clearly marked and isolated from live results; they are not evidence
 of model performance. Live runs require explicit consent in the tab and incur
 normal API usage. The UI shows the saved run's mode/sample size to distinguish it
 from current settings.
+
+### Measured live run — November 3, 2026
+
+Muse Spark `muse-spark-1.3`, seed 42, 50 reports (25 per source file): all 50
+responses were valid; none were excluded for failures or invalid predictions.
+These are descriptive results on this historical norm sample, not a clinical
+validation or evidence of generalization to new dreamers.
+
+| Character comparison | Exact report agreement | Micro F1 | Report-level kappa |
+| --- | ---: | ---: | ---: |
+| Presence | 98% | 0.990 | 0.658 |
+| Type | 72% | 0.939 | 0.665 |
+| Number/status | 64% | 0.893 | 0.603 |
+| Gender | 46% | 0.772 | 0.440 |
+| Identity | 46% | 0.748 | 0.447 |
+| Age | 66% | 0.911 | 0.590 |
+| Full codes (overall) | 30% | 0.595 | 0.295 |
+
+Overall full-code precision was 0.591 and recall 0.600. Strict full-code agreement
+requires every character code and its multiplicity to match within a report.
+Character presence performs much better than complete attribute coding; show
+both in the demo rather than describing the tool as a replacement for human
+coders. Full results and examples are saved locally in `data/benchmark/results.json`
+and `results.csv`; no reports or cached predictions are published here.
