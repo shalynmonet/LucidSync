@@ -22,6 +22,28 @@ with “That’s it”. Character descriptions are repeated in each scene prompt
 help preserve appearance. Live requests use the same Meta key and need the
 consent checkbox in the app.
 
+Corrections now ask Muse Spark to update the structured scene before Muse Image
+renders the revision. The original report is retained. Each revision stores its
+instruction, render prompt, round number, and structured record snapshot.
+Coding is cleared after a correction so it can be regenerated deliberately.
+
+## Grounded labeling and dataset export
+
+After every frame is locked, **Label locked scenes** sends each character and
+object name separately to SAM 3.1. The official Meta parser decodes the masks;
+OpenCV/NumPy place them on the source image and draw labeled overlays. Missing
+matches and multiple matches are shown for review. A name can match several
+instances, so those candidates require human review before research use.
+
+**Download session dataset (.zip)** exports final images, PNG masks, overlays,
+the DreamRecord, saved coding JSON/CSV when available, storyboard correction
+history, and COCO-style annotations with entity IDs and uncompressed RLE masks.
+Mock mode exports no invented masks. Unlocking a frame invalidates its dataset.
+All exports remain local until you choose to share them.
+
+SAM integration follows the [Meta segmentation guide](https://dev.meta.ai/docs/sam/segmenting)
+and uses `sam-3.1` through the same central API adapter.
+
 ### Windows setup (PowerShell)
 
 ```powershell
@@ -66,3 +88,64 @@ Image through the Responses API (`muse-image-1.0`).
 
 Dream data is intended to stay local. Do not add session data, API credentials,
 or private benchmark reports to a public repository.
+
+## Human-coder benchmark (milestone 7)
+
+The **Benchmark** tab loads `data/benchmark/hvdc_norms_female.csv` (490 reports)
+and `hvdc_norms_male.csv` (491 reports) from
+[dljve/TXMM](https://github.com/dljve/TXMM). Both files have exactly `Report` and
+`Characters` columns. These data support character evaluation only: emotions,
+aggression, friendliness and all other non-character categories are **not scored**.
+Historical reports can contain distressing content and outdated language.
+
+The default sample is 50 reports, 25 from each file, using seed 42. Choose another
+even sample size in the UI. Source-file group labels are retained as supplied;
+they describe the files, not an inferred gender of anyone in a report. Independent
+seeded shuffles make larger samples include the smaller sample. Saved results
+record sample IDs, source SHA-256 hashes, model, prompt-sensitive cache and mode.
+
+Character cells are legacy Python-list strings such as `[u'1MKA', u'1ANI']`.
+They are read using `ast.literal_eval`, never `eval`. Empty-string placeholders
+(15 female-file entries, 30 male-file entries) are dropped. Repeated nonempty codes
+are preserved: distinct characters can share the same code. Unsupported codes
+cause a visible validation error rather than being guessed.
+
+Mapping rules (also documented in `benchmark.py`):
+
+- Human and model codes use number/status + gender + identity + age, e.g.
+  `1MKA` = individual, male, known, adult. Animals use `ANI`; unknown creatures
+  use `CZZ` instead of human attributes. The dreamer is excluded.
+- The main app and benchmark use the same `code_dream` function and prompt.
+  Character rows must contain one exact code and a verbatim report quote.
+  Malformed codes or unsupported evidence mark the response invalid and are
+  reported separately; API failures and invalid responses are excluded from
+  scored denominators, so always read coverage beside the scores.
+- Each report is projected into multisets for full codes, type, number/status,
+  gender, identity and age, plus binary character presence. Animals/creatures
+  contribute no human gender, identity or age values. No entity alignment is
+  claimed because source character lists have no entity IDs or report spans.
+- Percent agreement is the fraction of reports with exactly equal multisets for
+  that attribute. Overall agreement is exact full-code-multiset agreement, not
+  an average that double-counts correlated character attributes.
+- Precision, recall and F1 use micro-aggregated multiset overlap (minimum count
+  per label). Presence uses positive-class binary metrics. Undefined denominators
+  are blank, not perfect scores.
+- Cohen's kappa treats each report's complete attribute multiset as a nominal
+  label. It is report-level kappa, **not aligned character-level kappa**. It is
+  blank if chance agreement is one or there are no valid reports. This protocol
+  differs from the TXMM paper's matching procedure and scores are not directly
+  comparable with its published percent-perfect-agreement results.
+
+Every validated model response is cached in `data/benchmark/cache`, keyed by
+report, model, full coding prompt, mapping version and mock/live mode. Prompt
+changes invalidate the cache; sample size changes reuse applicable responses.
+Reruns retry errors but reuse cached invalid predictions so they remain auditable.
+The tab displays up to three exact matches and three misses with both code lists;
+when fewer exist it says so. Results go to `results.json` and `results.csv`.
+All benchmark data, caches, and report text remain excluded from GitHub.
+
+With `MOCK_MODE=true`, predictions are empty placeholders. Mock results and cache
+entries are clearly marked and isolated from live results; they are not evidence
+of model performance. Live runs require explicit consent in the tab and incur
+normal API usage. The UI shows the saved run's mode/sample size to distinguish it
+from current settings.

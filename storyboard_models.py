@@ -9,6 +9,8 @@ class ImageRevision(BaseModel):
     image_path: str | None = None
     response_id: str | None = None
     instruction: str = "Initial render"
+    prompt: str = ""
+    record_snapshot: dict | None = None
 
 
 class StoryboardFrame(BaseModel):

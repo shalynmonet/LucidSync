@@ -3,6 +3,7 @@
 import json
 import os
 import base64
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -61,6 +62,22 @@ event not simply an emotion); emotions (explicitly felt or attributed); settings
 time, and negation). A code must be supported by a short verbatim quote from the
 dream report. Do not force a code where evidence is absent. Return a concise,
 plain-language summary that describes content without interpretation or advice.
+For character rows use category "characters" and one exact Hall/Van de Castle
+code per distinct character (exclude the dreamer; count recurring characters once).
+Codes contain number/status, gender, identity, age in that order.
+Number/status: 1 individual, 2 group, 3 dead individual, 4 dead group,
+5 imaginary individual, 6 imaginary group, 7 original form, 8 changed form.
+Gender: M male, F female, I indefinite, J joint group.
+Identity: F father, M mother, X parents, B brother, T sister, H husband,
+W wife, A son, D daughter, C child, I infant, Y immediate family,
+R relative, K known, P prominent, O occupational, E ethnic/national,
+S stranger, U uncertain. Prefer the most familiar applicable identity.
+Age: A adult (default), T teenager 13–17, C child 1–12, B baby under 1.
+Animals use number/status followed by ANI (e.g. 1ANI); creatures of unknown
+human/animal type use CZZ. Examples: 1MKA, 2FUA, 1ANI.
+Include characters mentioned, communicated with, or referred to through ownership
+or relationships; exclude generic people, negated alternatives and implied actors.
+Do not merge distinct characters merely because their codes are identical.
 """
 
 
@@ -171,7 +188,7 @@ def code_dream(record: DreamRecord) -> DreamCoding:
     client = OpenAI(base_url=BASE_URL, api_key=META_API_KEY)
     messages = [
         {"role": "system", "content": CODING_SYSTEM_PROMPT},
-        {"role": "user", "content": json.dumps(record.model_dump(), ensure_ascii=False)},
+        {"role": "user", "content": json.dumps({"dream_report": record.dream_report}, ensure_ascii=False)},
     ]
     for attempt in range(2):
         try:
@@ -215,6 +232,34 @@ def _scene_image_prompt(scene: DreamScene, style: str) -> str:
     )
 
 
+def correct_dream_scene(record: DreamRecord, scene_number: int, instruction: str) -> DreamRecord:
+    """Update structured scene details while retaining the original morning report."""
+    if MOCK_MODE:
+        return record.model_copy(deep=True)
+    client = OpenAI(base_url=BASE_URL, api_key=META_API_KEY)
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT +
+         " Apply the user's correction to the specified scene. Preserve scene order, "
+         "entity IDs and all unrelated details. If a character design changes, keep "
+         "its description consistent in every scene. Return all scenes."},
+        {"role": "user", "content": json.dumps({"record": record.model_dump(),
+         "scene_number": scene_number, "correction": instruction})},
+    ]
+    for attempt in range(2):
+        try:
+            response = client.beta.chat.completions.parse(
+                model=MODEL_ID, messages=messages, response_format=DreamStructure)
+            parsed = response.choices[0].message.parsed
+            if parsed is None:
+                raise StructuredOutputError("No corrected scene structure returned.")
+            return DreamRecord.model_validate({**record.model_dump(), "scenes": parsed.scenes})
+        except (ValidationError, StructuredOutputError):
+            if attempt:
+                raise RuntimeError("The corrected scene failed validation after one retry.")
+            messages.append({"role": "user", "content": "Retry with valid ordered scenes and consistent character details."})
+    raise RuntimeError("Could not correct the scene.")
+
+
 def _image_bytes(response) -> bytes:
     image_call = next(
         (item for item in response.output if item.type == "image_generation_call"),
@@ -255,11 +300,14 @@ def generate_storyboard(record: DreamRecord, session_id: str, style: str) -> Sto
             prompt=prompt,
             revisions=[revision],
         ))
+        revision.prompt = prompt
+        revision.record_snapshot = record.model_dump()
     return Storyboard(frames=frames)
 
 
 def refine_storyboard_frame(
-    storyboard: Storyboard, session_id: str, scene_number: int, instruction: str
+    storyboard: Storyboard, session_id: str, scene_number: int, instruction: str,
+    corrected_record: DreamRecord | None = None,
 ) -> Storyboard:
     """Refine one unlocked frame, retaining Muse Image's turn context."""
     frame = next((f for f in storyboard.frames if f.scene_number == scene_number), None)
@@ -275,11 +323,15 @@ def refine_storyboard_frame(
     if not prior.response_id:
         raise RuntimeError("This frame has no live render to continue from.")
     client = OpenAI(base_url=BASE_URL, api_key=META_API_KEY)
+    render_prompt = instruction.strip()
+    if corrected_record is not None:
+        scene = next(s for s in corrected_record.scenes if s.scene_number == scene_number)
+        render_prompt += "\nUpdated scene details: " + scene.model_dump_json()
     try:
         response = client.responses.create(
             model=IMAGE_MODEL_ID,
             previous_response_id=prior.response_id,
-            input=instruction.strip(),
+            input=render_prompt,
         )
         next_round = prior.round_number + 1
         image_path = session_dir_for(session_id) / (
@@ -293,5 +345,45 @@ def refine_storyboard_frame(
         image_path=str(image_path),
         response_id=response.id,
         instruction=instruction.strip(),
+        prompt=render_prompt,
+        record_snapshot=corrected_record.model_dump() if corrected_record else None,
     ))
     return storyboard
+
+
+async def segment_entity(image_path: str, concept: str):
+    """Segment one concept with the official SAM parser; no invented masks."""
+    from openai import AsyncOpenAI
+    from meta_sam_parser import parse_responses_stream, image_segmentation_format
+    from contextlib import aclosing
+
+    async def normalized_events(stream):
+        closed = set()
+        async for event in stream:
+            data = event.model_dump()
+            lane = tuple(data.get(k) for k in ("item_id", "output_index", "content_index"))
+            if data.get("type") == "response.output_text.done":
+                if lane in closed:
+                    continue
+                closed.add(lane)
+            yield data
+            part = data.get("part", {})
+            if data.get("type") == "response.content_part.done" and part.get("type") == "output_text" and lane not in closed:
+                closed.add(lane)
+                yield {"type": "response.output_text.done", "item_id": lane[0],
+                       "output_index": lane[1], "content_index": lane[2], "text": part["text"]}
+
+    if MOCK_MODE:
+        return None
+    encoded = base64.b64encode(Path(image_path).read_bytes()).decode("ascii")
+    async with AsyncOpenAI(base_url=BASE_URL, api_key=META_API_KEY) as client:
+        stream = await client.responses.create(model="sam-3.1", stream=True, input=[{
+            "type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": concept},
+                {"type": "input_image", "image_url": "data:image/webp;base64," + encoded},
+            ]}])
+        async with stream, aclosing(normalized_events(stream)) as events:
+            result = await parse_responses_stream(events, image_segmentation_format()).final_result()
+    if result.outcome.status != "completed" or any(d.severity == "error" for d in result.diagnostics):
+        raise RuntimeError("SAM did not return a complete, valid segmentation.")
+    return result
