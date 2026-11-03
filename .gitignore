@@ -1,0 +1,16 @@
+# Local environment and secrets
+.env
+.venv/
+venv/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+# Local dream data is private
+data/
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
