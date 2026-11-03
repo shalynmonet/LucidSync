@@ -24,13 +24,29 @@ from storage import (
 st.set_page_config(page_title="LucidSync", page_icon="🌙", layout="centered")
 
 from benchmark import render_benchmark
+from sleep_log import render_sleep_tab
+from nightmare import render_nightmare_tab
+from sleep_import import render_sleep_import
 
-dream_tab, benchmark_tab = st.tabs(["Dream workspace", "Benchmark"])
+dream_tab, benchmark_tab, sleep_tab, rewrite_tab, tracker_tab = st.tabs(["Dream workspace", "Benchmark", "Sleep paralysis", "Safer ending", "Sleep timeline"])
 with dream_tab:
     st.title("LucidSync")
     st.write(
         "Turn a morning dream memory into structured, visualized, and labeled data."
     )
+    st.caption("Capture → Code → Storyboard → Correct → Lock → Label & export")
+    if st.button("Load sample dream instantly"):
+        from demo import sample_dream
+        demo_record = sample_dream()
+        sid, path = save_dream_record(demo_record)
+        st.session_state["dream_record"] = demo_record
+        st.session_state["dream_session_id"] = sid
+        st.session_state["dream_record_path"] = str(path)
+        st.session_state["dream_is_sample"] = True
+        st.session_state.pop("dream_coding", None)
+        st.session_state.pop("storyboard", None)
+    if st.session_state.get("dream_is_sample"):
+        st.info("Synthetic sample dream loaded for the demo. No API call was needed to load it.")
     st.info(
         "Research and wellness tool, not a medical device. LucidSync does not diagnose."
     )
@@ -77,6 +93,7 @@ with dream_tab:
                     )
                     session_id, record_path = save_dream_record(record)
                 st.session_state["dream_record"] = record
+                st.session_state["dream_is_sample"] = False
                 st.session_state["dream_session_id"] = session_id
                 st.session_state["dream_record_path"] = str(record_path)
                 st.session_state.pop("dream_coding", None)
@@ -270,3 +287,12 @@ with dream_tab:
 
 with benchmark_tab:
     render_benchmark()
+
+with sleep_tab:
+    render_sleep_tab()
+
+with rewrite_tab:
+    render_nightmare_tab()
+
+with tracker_tab:
+    render_sleep_import()

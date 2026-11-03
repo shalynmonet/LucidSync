@@ -89,6 +89,93 @@ Image through the Responses API (`muse-image-1.0`).
 Dream data is intended to stay local. Do not add session data, API credentials,
 or private benchmark reports to a public repository.
 
+## Sleep paralysis journal (milestone 8)
+
+The **Sleep paralysis** tab records a night date, bedtime, sleep hours, sleep
+position, caffeine servings, alcohol drinks, stress (1–5), irregular schedule,
+and whether an episode occurred. Episode nights also include estimated time,
+duration, experiences and fear (0–10). Normal-night logs provide a comparison.
+There is one log per date; duplicate dates are rejected rather than overwriting
+your journal. Personal logs stay in ignored `data/sleep_logs.json`.
+
+**Load sample data · 3 weeks** loads 21 fixed, explicitly synthetic nights into
+`data/sleep_sample_logs.json`, separately from personal logs. The example contains
+five episode nights, four following nights under six hours, and 16 normal nights,
+two under six hours. Switch between sample and personal views using the checkbox.
+
+Pattern tables show counts and denominators for short sleep, position, stress,
+irregular schedules and any caffeine/alcohol use. These describe the recorded
+nights; they do not prove causes or predict episodes. The optional Muse Spark
+explanation sends aggregate counts only after consent; journal narratives stay
+local. Mock mode produces a labeled local explanation without an API request.
+
+The tab always suggests talking to a doctor for frequent episodes or excessive
+daytime sleepiness and does not diagnose. A separate, optional presence
+illustration is hidden behind a content warning and explicit opt-in; rendering
+requires consent to send the description to Meta. It is a visualization of a
+remembered experience, not evidence of a real presence. Its images and metadata
+are stored in a local dream-session folder.
+
+## Safer ending (milestone 9)
+
+The **Safer ending** tab lets you supply a nightmare and your preferred safer
+ending, or request a Muse Spark suggestion. Review and edit the complete
+alternative narrative before approving a Muse Image storyboard. The alternative
+is saved as a separate session with `rewrite.json` recording its original text,
+preferred ending and approved narrative; the original dream workspace is retained.
+It is labeled as a rehearsal support tool to use alongside a clinician, without
+diagnosis, treatment instructions or promises of benefit. Mock mode uses explicit
+local text/image placeholders.
+
+Muse Wonder's [documented output is text](https://dev.meta.ai/docs/models), so
+this workflow uses still storyboards rather than claiming video or 3D-world
+generation support.
+
+## Sleep timeline and demo (milestones 10–11)
+
+**Load sample dream instantly** creates an explicitly synthetic two-scene garden
+dream locally, with the same cat ID and visual description in both scenes. It
+makes no API call until you explicitly code or render it. The workspace shows
+the demo path: capture, code, storyboard, correct, lock, label and export.
+
+The **Sleep timeline** tab accepts tracker CSVs and shows their actual columns
+before asking you to map start time, stage, and optional end time. Timestamps
+without offsets use your declared IANA timezone (default `America/Chicago`);
+offset-aware timestamps retain their offsets, and the chart uses UTC. Duplicate,
+overlapping, missing or invalid intervals are rejected. If ends are absent, each
+next start is used as the preceding end and the final unknown interval is omitted.
+This assumes continuous rows; use explicit end times for exports with gaps.
+
+Choose your export's REM label and optionally enter the dream timestamp to draw
+a marker. The chart reports REM minutes in the imported intervals only. Tracker
+stage labels are estimates; proximity to REM does not prove when a dream occurred.
+Imports are processed locally, with a normalized CSV download and no Meta calls.
+
+### Meta model usage for judges
+
+| Model | How LucidSync uses it |
+| --- | --- |
+| Muse Spark `muse-spark-1.3` | Validated scene structure, character-aware corrections, content coding, the human-coder benchmark, aggregate sleep-pattern explanation, and reviewable safer-ending drafts. |
+| Muse Image `muse-image-1.0` | Scene storyboards, contextual image corrections, optional presence illustrations and approved alternative-ending storyboards. |
+| SAM `sam-3.1` | Concept masks for each locked scene's character/object names; entity-linked overlays and COCO-style export. |
+| Muse Wonder | Capabilities checked in official docs. Text output does not meet the requested video/world-generation condition, so no animation endpoint is assumed. |
+
+All Meta API calls live in `meta_client.py`. Each live workflow has consent
+controls. The app remains usable in mock mode with clearly marked placeholders.
+
+### Run the complete demo on Windows
+
+```powershell
+Set-Location C:\Users\SHALY\Projects\lucidsync
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+For a quick walkthrough, load the sample dream; open the Benchmark tab to view
+the saved live run; load the three-week synthetic sleep logs; and prepare a safer
+ending for review. Switch `.env` to `MOCK_MODE=false` and restart Streamlit when
+you want live calls. Keep your key, dream sessions and benchmark cache private.
+
 ## Human-coder benchmark (milestone 7)
 
 The **Benchmark** tab loads `data/benchmark/hvdc_norms_female.csv` (490 reports)
